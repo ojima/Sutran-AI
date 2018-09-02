@@ -1,5 +1,5 @@
 # Sutran-AI
-Dirty implementation of the board game Sutran in C++ with a "working" AI using AB-pruning to explore the game tree.
+Dirty implementation of the board game Sutran in C++ with a "working" AI using alpha-beta-pruning to explore the game tree.
 
 # How to build
 
@@ -41,7 +41,7 @@ In order to capture an opposing unit, a player first needs to ensure that it is 
 
 The controls of Sutran are reasonably simple - I think most if not all of the difficulty would come from it's lack of user-friendliness.
 
-Left-click on a piece to select it, right-click anywhere to deselect it. Selecting a piece will highlight its legal moves, and clicking on any of the highlighted tiles will show an arrow pointing to the position where you want to move your piece. Left-click on an empty tile in the home row will cycle through reinforcement options.
+Left-click on a piece to select it, right-click anywhere to deselect it. Selecting a piece will highlight its legal moves, and clicking on any of the highlighted tiles will show an arrow pointing to the position where you want to move your piece. Left-click on an empty tile in the home row will cycle through reinforcement options. Note that it may feel awkward that I cannot, for example, move a knight and then move a soldier onto the tile it will vacate - this is intended (each move you make in a turn must be a legal move on its own).
 Pressing `B` or `Numpad-5` will confirm a set of moves (making no moves will count as passing your turn), execute it and change turns to the other side.
 Pressing `D` or `Numpad-8` will make the computer evaluate all possible moves and make the best one it can find. By default, the computer will evaluate 4 moves deep, but this can be changed with the `+` and `-` keys. I recommend leaving it at 4 or lowering it to 3 if you find that your PC takes too long to compute moves. In my experience, leaving it at 4 takes about 10 seconds to find a good move, although some moves can suddenly spike up to a minute or more.
 Pressing `N` or `Numpad-1` will start a new game, and pressing `C` or `Numpad-0` will clear the board (which is pointless because I haven't implemented a "scenario editor" function yet).
