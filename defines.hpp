@@ -40,7 +40,7 @@ const int TEX_HEIGHT = 60;
 
 const int DEFAULT_WIDTH = 9; // classical: 9
 const int DEFAULT_HEIGHT = 7; // classical: 7
-const int DEFAULT_PAWNS = 13; // classical: 13
+const int DEFAULT_PAWNS = 10; // classical: 10
 const int DEFAULT_KNIGHTS = 6; // classical: 6
 const int DEFAULT_FLANKING = 2; // classical: 2
 
