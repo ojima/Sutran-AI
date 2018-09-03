@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	bool running = true;
-	int depth = 4;
+	int depth = -6;
 	SDL_Event e;
 	while (running) {
 		bool didTick = false;
@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
 
 					case SDLK_MINUS:
 					case SDLK_KP_MINUS:
-						if (depth > 0) depth--;
+						depth--;
 						printf("Decreasing evaluation depth to %d.\n", depth);
 						break;
 

@@ -4,6 +4,7 @@
 struct SDL_Texture;
 
 #define PI 3.141592653589793
+#undef RANDOMIZE_UNITS
 
 # if SDL_BYTEORDER == SDL_BIG_ENDIAN
 
@@ -44,18 +45,21 @@ const int DEFAULT_PAWNS = 10; // classical: 10
 const int DEFAULT_KNIGHTS = 6; // classical: 6
 const int DEFAULT_FLANKING = 2; // classical: 2
 
+// values set such that CAPTURE > ON BOARD > IN RESERVES
+// without making captures a terrible idea (e.g. sacrificing a knight to capture a pawn)
 const double PAWN_VALUE = 1.0;
 const double KNIGHT_VALUE = 3.0;
 
-const double PAWN_RESERVE_VALUE = 1.0;
-const double KNIGHT_RESERVE_VALUE = 3.0;
+const double PAWN_RESERVE_VALUE = 0.9;
+const double KNIGHT_RESERVE_VALUE = 2.9;
 
-const double PAWN_CAPTURE_VALUE = 0.8;
-const double KNIGHT_CAPTURE_VALUE = 2.5;
+const double PAWN_CAPTURE_VALUE = 1.2;
+const double KNIGHT_CAPTURE_VALUE = 3.2;
 
-const double CENTER_POSITION_VALUE = 0.1;
+const double CENTER_POSITION_VALUE = 0.02;
 const double MOVE_VALUE = 0.01;
 
+const double EVAL_DISPERSION = 0.01;
 const double BBOX_SIZE = 0.9;
 
 struct Rect {
@@ -77,6 +81,11 @@ struct Turn {
 #define TURN_MOVE 0x01
 #define TURN_REINFORCE 0x02
 #define TURN_REINFORCE_KNIGHT 0x04
+
+#define WINSTATE_NONE 0x00
+#define WINSTATE_DRAW 0x01
+#define WINSTATE_WHITE 0x02
+#define WINSTATE_BLACK 0x03
 
 extern SDL_Texture* tex_pieces;
 extern SDL_Texture* tex_selections;

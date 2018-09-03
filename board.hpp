@@ -35,7 +35,7 @@ class Board {
 		Piece** piece_moves;
 		Move* moves;
 		Piece* selection;
-		bool turn, reinforcing, reinforce_knight;
+		bool turn;
 		int p1_pawns, p1_knights, p1_pawns_c, p1_knights_c;
 		int p2_pawns, p2_knights, p2_pawns_c, p2_knights_c;
 		std::string position_history;

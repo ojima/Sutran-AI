@@ -13,15 +13,15 @@
 #include "piece.hpp"
 #include "utils.hpp"
 
+static std::random_device rd;
+static std::mt19937 gen(rd());
+
 Board::Board(int width, int height) {
 	this->width = width;
 	this->height = height;
 	this->selection = nullptr;
 	this->turn = true;
 	this->passstate = 0;
-
-	this->reinforcing = false;
-	this->reinforce_knight = false;
 
 	this->reinstate = 0;
 
@@ -51,10 +51,7 @@ Board::Board(Board* b, Turn t) {
 	this->turn = b->turn;
 	this->passstate = b->passstate;
 
-	this->reinforcing = (t.flags & TURN_REINFORCE);
-	this->reinforce_knight = (t.flags & TURN_REINFORCE_KNIGHT);
-
-	this->reinstate = 0;
+	this->reinstate = t.flags & (TURN_REINFORCE | TURN_REINFORCE_KNIGHT);
 
 	this->p1_pawns = b->p1_pawns;
 	this->p1_knights = b->p1_knights;
@@ -74,6 +71,11 @@ Board::Board(Board* b, Turn t) {
 		Piece* q = new Piece(*p);
 		pieces.push_back(q);
 	}
+
+#ifdef RANDOMIZE_UNITS
+	pieces.shrink_to_fit();
+	std::shuffle(pieces.begin(), pieces.end(), gen);
+#endif // RANDOMIZE_UNITS
 
 	for (int i = 0; i < 3; i++) {
 		piece_moves[i] = nullptr;
@@ -112,6 +114,9 @@ void Board::NewGame(int pawns, int knights, int flanking) {
 		pieces.push_back(m);
 		pieces.push_back(n);
 	}
+
+	pieces.shrink_to_fit();
+	std::shuffle(pieces.begin(), pieces.end(), gen);
 
 	int ps = pawns - width + 2 * flanking;
 	int ks = knights - 2 * flanking;
@@ -172,17 +177,19 @@ Piece* Board::pieceAt(int x, int y) {
 
 void Board::ChangeTurn() {
 	bool didmove = false;
-	if (reinforcing) {
-		Piece* p = new Piece(this, turn, reinforce_knight, moves[0].x2, moves[0].y2);
+	if (reinstate > 0) {
+		Piece* p = new Piece(this, turn, (reinstate == 2), moves[0].x2, moves[0].y2);
 		pieces.push_back(p);
 
 		if (turn) {
-			if (reinforce_knight) p1_knights--;
+			if (reinstate == 2) p1_knights--;
 			else p1_pawns--;
 		} else {
-			if (reinforce_knight) p2_knights--;
+			if (reinstate == 2) p2_knights--;
 			else p2_pawns--;
 		}
+
+		didmove = true;
 	} else {
 		for (int i = 0; i < 3; i++) {
 			Piece* p = piece_moves[i];
@@ -227,8 +234,6 @@ void Board::ChangeTurn() {
 		passstate++;
 	}
 
-	reinforcing = false;
-	reinforce_knight = false;
 	selection = nullptr;
 	turn = !turn;
 	reinstate = 0;
@@ -239,13 +244,15 @@ void Board::ChangeTurn() {
 std::vector<Turn> Board::possibleTurns() {
 	std::vector<Turn> turns;
 
-	// Pass
-	if (passstate < 2) {
-		Turn t;
-		t.move_count = 0;
-		t.flags = TURN_MOVE;
-		turns.push_back(std::move(t));
-	}
+	// Pass - not considered by the AI
+	/*
+	 if (passstate < 2) {
+	 Turn t;
+	 t.move_count = 0;
+	 t.flags = TURN_MOVE;
+	 turns.push_back(t);
+	 }
+	 */
 
 	// Captures
 	for (unsigned i = 0; i < pieces.size(); i++) {
@@ -263,7 +270,7 @@ std::vector<Turn> Board::possibleTurns() {
 			t.move_count = 1;
 			t.moves[0] = m;
 			t.flags = TURN_MOVE;
-			turns.push_back(std::move(t));
+			turns.push_back(t);
 		}
 	}
 
@@ -277,14 +284,14 @@ std::vector<Turn> Board::possibleTurns() {
 				t.move_count = 1;
 				t.moves[0] = {-1, -1, i, height - 1};
 				t.flags = TURN_REINFORCE | TURN_REINFORCE_KNIGHT;
-				turns.push_back(std::move(t));
+				turns.push_back(t);
 			}
 			if (p1_pawns > 0) {
 				Turn t;
 				t.move_count = 1;
 				t.moves[0] = {-1, -1, i, height - 1};
 				t.flags = TURN_REINFORCE;
-				turns.push_back(std::move(t));
+				turns.push_back(t);
 			}
 		} else {
 			if (!isEmpty(i, 0)) continue;
@@ -294,14 +301,14 @@ std::vector<Turn> Board::possibleTurns() {
 				t.move_count = 1;
 				t.moves[0] = {-1, -1, i, 0};
 				t.flags = TURN_REINFORCE | TURN_REINFORCE_KNIGHT;
-				turns.push_back(std::move(t));
+				turns.push_back(t);
 			}
 			if (p2_pawns > 0) {
 				Turn t;
 				t.move_count = 1;
 				t.moves[0] = {-1, -1, i, 0};
 				t.flags = TURN_REINFORCE;
-				turns.push_back(std::move(t));
+				turns.push_back(t);
 			}
 		}
 	}
@@ -371,7 +378,7 @@ std::vector<Turn> Board::possibleTurns() {
 double AlphaBetaPrune(Board* board, int depth, double alpha, double beta, std::vector<std::pair<std::size_t, double>>& hashtable) {
 	std::vector<Turn> turns = board->possibleTurns();
 
-	if (depth == 0 or turns.size() == 0) return board->Evaluate();
+	if (depth == 0 or turns.size() == 0 or board->WinState() != WINSTATE_NONE) return board->Evaluate();
 
 	double val, wal;
 	Board* b;
@@ -457,6 +464,11 @@ double PrincipalVariationPrune(Board* board, int depth, double alpha, double bet
 }
 
 void Board::ComputeTurn(int depth = 0) {
+	// We shuffle the list of pieces to make sure the moves list is not hard dependent on the piece ordering every time
+	//static std::random_device rd;
+	//static std::mt19937 gen(rd());
+	//std::shuffle(pieces.begin(), pieces.end(), gen);
+
 	// Minmax algorithm with AB-pruning
 	std::vector<Turn> turns = possibleTurns();
 
@@ -482,8 +494,8 @@ void Board::ComputeTurn(int depth = 0) {
 	unsigned bt = -1;
 	Board* b;
 
-	if (depth == 0) depth = (int) std::log10(10000.0 / turns.size());
-	if (depth < 1) depth = 1;
+	if (depth <= -1) depth = (-depth) - std::round(std::log10(turns.size()));
+	if (depth <= 0) depth = 1;
 
 	printf("Evaluating moves up to depth %d.\n", depth);
 
@@ -564,10 +576,7 @@ void Board::ComputeTurn(int depth = 0) {
 		this->moves[i] = t.moves[i];
 	}
 
-	this->reinforcing = (t.flags & TURN_REINFORCE);
-	this->reinforce_knight = (t.flags & TURN_REINFORCE_KNIGHT);
-
-	if (t.flags & TURN_REINFORCE) {
+	if ((reinstate = (t.flags & (TURN_REINFORCE | TURN_REINFORCE_KNIGHT)))) {
 		printf("Reinforcements arriving at (%d,%d).\n", t.moves[0].x2, t.moves[0].y2);
 	}
 
@@ -586,7 +595,7 @@ int Board::WinState() {
 			if (pp.first == line) {
 				found = true;
 				if (++pp.second >= 3) {
-					return 1; // draw by repetition.
+					return WINSTATE_DRAW; // draw by repetition.
 				}
 
 				break;
@@ -606,30 +615,37 @@ int Board::WinState() {
 		else black++;
 	}
 
-	if (white == 0 or white + p1_pawns + p1_knights < 4) return 3; // black wins
-	else if (black == 0 or black + p2_pawns + p2_knights < 4) return 2; // white wins.
+	if (white == 0 or white + p1_pawns + p1_knights < 4) return WINSTATE_BLACK; // black wins
+	else if (black == 0 or black + p2_pawns + p2_knights < 4) return WINSTATE_WHITE; // white wins.
 
 	// Final check: see if either side is capable of making moves.
 	found = turn;
 
+	// doing this in a messy way to avoid having to program in more checks/variables
 	turn = true;
-	white = 0; // undecided
-	if (possibleTurns().size() == 0) white = 3;
-	turn = false;
-	if (possibleTurns().size() == 0) white = 2;
+	white = WINSTATE_NONE; // undecided
+	if (possibleTurns().size() == 0) white = WINSTATE_BLACK;
+	else {
+		turn = false;
+		if (possibleTurns().size() == 0) white = WINSTATE_WHITE;
+	}
 	turn = found;
 	return white;
 }
 
 double Board::Evaluate() {
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+	static std::normal_distribution<double> d(0.0, EVAL_DISPERSION);
+
 	int state = WinState();
 
 	switch (state) {
-		case 1:
+		case WINSTATE_DRAW:
 			return 0.0;
-		case 2:
+		case WINSTATE_WHITE:
 			return +1000.0;
-		case 3:
+		case WINSTATE_BLACK:
 			return -1000.0;
 		default:
 			break;
@@ -646,12 +662,16 @@ double Board::Evaluate() {
 		}
 	}
 
-	return score;
+	return score + d(gen);
 }
 
 void Board::RemovePiece(Piece* p) {
-	pieces.erase(std::remove(pieces.begin(), pieces.end(), p), pieces.end());
-	delete p;
+	if (p != nullptr) {
+		pieces.erase(std::remove(pieces.begin(), pieces.end(), p), pieces.end());
+		delete p;
+	}
+
+	pieces.shrink_to_fit();
 }
 
 void Board::Render(SDL_Renderer* context) {
@@ -724,9 +744,7 @@ void Board::Render(SDL_Renderer* context) {
 					piece_moves[0] = nullptr;
 					piece_moves[1] = nullptr;
 					piece_moves[2] = nullptr;
-					reinforce_knight = (reinstate == 2);
 					selection = nullptr;
-					reinforcing = true;
 				}
 			}
 		} else {
@@ -740,7 +758,6 @@ void Board::Render(SDL_Renderer* context) {
 					piece_moves[1] = nullptr;
 					piece_moves[2] = nullptr;
 					selection = nullptr;
-					reinforcing = false;
 					reinstate = 0;
 				}
 			} else {
@@ -750,25 +767,21 @@ void Board::Render(SDL_Renderer* context) {
 						if (piece_moves[i] == nullptr) {
 							moves[i] = {selection->getX(), selection->getY(), tx, ty};
 							piece_moves[i] = selection;
-							reinforcing = false;
 							reinstate = 0;
 							break;
 						} else {
 							if (piece_moves[i] == selection) {
 								moves[i] = {selection->getX(), selection->getY(), tx, ty};
-								reinforcing = false;
 								reinstate = 0;
 								break;
 							} else if (moves[i].x2 == tx and moves[i].y2 == ty) {
 								piece_moves[i] = selection;
 								moves[i] = {selection->getX(), selection->getY(), tx, ty};
-								reinforcing = false;
 								reinstate = 0;
 								break;
 							} else if (!isEmpty(moves[i].x2, moves[i].y2)) {
 								piece_moves[i] = selection;
 								moves[i] = {selection->getX(), selection->getY(), tx, ty};
-								reinforcing = false;
 								reinstate = 0;
 								break;
 							}
